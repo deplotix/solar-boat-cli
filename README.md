@@ -53,7 +53,7 @@ jobs:
       - uses: actions/checkout@v3
       
       - name: Setup Solar Boat CLI
-        uses: doubltech/solar-boat-action@v1
+        uses: deplotix/solar-boat-action@v1
         with:
           version: 'latest'  # or specify a version like 'v1.0.0'
           
@@ -82,8 +82,8 @@ This project is licensed under the BSD-3-Clause License - see the [LICENSE](LICE
 
 ## Support
 
-- Issues: [GitHub Issues](https://github.com/doubltech/solar-boat-cli/issues)
-- Discussions: [GitHub Discussions](https://github.com/doubltech/solar-boat-cli/discussions)
+- Issues: [GitHub Issues](https://github.com/deplotix/solar-boat-cli/issues)
+- Discussions: [GitHub Discussions](https://github.com/deplotix/solar-boat-cli/discussions)
 
 ## Acknowledgments
 

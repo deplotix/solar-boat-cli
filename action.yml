@@ -1,0 +1,12 @@
+name: 'Solar Boat CLI Action'
+description: 'GitHub Action for Solar Boat CLI tool'
+inputs:
+  args:
+    description: 'Arguments to pass to the CLI tool'
+    required: false
+    default: ''
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
+  args:
+    - ${{ inputs.args }} 
