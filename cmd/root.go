@@ -6,7 +6,7 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use:     "solarboat",
-	Version: "0.1.1",
+	Version: "0.1.2",
 	Short:   "Solar Boat - A CLI tool for GitOps and Developer Experience",
 	Long: `Solar Boat is a command-line interface tool designed for Infrastructure as Code (IaC) 
 and GitOps workflows. It provides a wide range of Developer Experience (DX) capabilities including:

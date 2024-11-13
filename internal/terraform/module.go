@@ -83,8 +83,13 @@ func RunTerraformCommand(modules []string, command string, outputDir string) err
 	for _, modulePath := range modules {
 		args := []string{command}
 
-		// Add plan output file if specified
-		if command == "plan" && outputDir != "" {
+		if command == "plan" {
+			if outputDir == "" {
+				outputDir = "terraform-plans"
+			}
+			if err := os.MkdirAll(outputDir, 0755); err != nil {
+				return fmt.Errorf("failed to create output directory: %w", err)
+			}
 			planFile := filepath.Join(outputDir, fmt.Sprintf("%s.tfplan", filepath.Base(modulePath)))
 			args = append(args, "-out="+planFile)
 		}

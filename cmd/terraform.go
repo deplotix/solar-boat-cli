@@ -14,7 +14,7 @@ var terraformCmd = &cobra.Command{
 	Long:  `Execute Terraform operations on changed modules and their dependencies`,
 }
 
-var planOutputDir string
+var planOutputDir string = "terraform-plans"
 
 var planCmd = &cobra.Command{
 	Use:   "plan",
@@ -31,11 +31,8 @@ var planCmd = &cobra.Command{
 			return nil
 		}
 
-		if planOutputDir != "" {
-			// Create output directory if it doesn't exist
-			if err := os.MkdirAll(planOutputDir, 0755); err != nil {
-				return fmt.Errorf("failed to create output directory: %w", err)
-			}
+		if err := os.MkdirAll(planOutputDir, 0755); err != nil {
+			return fmt.Errorf("failed to create output directory: %w", err)
 		}
 
 		fmt.Printf("Running terraform plan on %d modules\n", len(modules))
@@ -59,12 +56,12 @@ var applyCmd = &cobra.Command{
 		}
 
 		fmt.Printf("Running terraform apply on %d modules\n", len(modules))
-		return terraform.RunTerraformCommand(modules, "apply")
+		return terraform.RunTerraformCommand(modules, "apply", "")
 	},
 }
 
 func init() {
-	planCmd.Flags().StringVar(&planOutputDir, "output-dir", "", "Directory to save plan outputs")
+	planCmd.Flags().StringVar(&planOutputDir, "output-dir", "terraform-plans", "Directory to store plan files (default: terraform-plans)")
 	terraformCmd.AddCommand(planCmd)
 	terraformCmd.AddCommand(applyCmd)
 	rootCmd.AddCommand(terraformCmd)
