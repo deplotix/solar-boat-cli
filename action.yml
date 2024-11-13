@@ -5,8 +5,36 @@ inputs:
     description: 'Arguments to pass to the CLI tool'
     required: false
     default: ''
+  github_token:
+    description: 'GitHub token for PR comments'
+    required: true
 runs:
-  using: 'docker'
-  image: 'Dockerfile'
-  args:
-    - ${{ inputs.args }} 
+  using: 'composite'
+  steps:
+    - name: Run Solar Boat CLI
+      run: |
+        mkdir -p terraform-plans
+        /solar-boat-cli terraform plan --output-dir terraform-plans
+      shell: bash
+
+    - name: Upload Terraform Plans
+      uses: actions/upload-artifact@v3
+      with:
+        name: terraform-plans
+        path: terraform-plans/
+
+    - name: Comment on PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{ inputs.github_token }}
+        script: |
+          const artifactUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/artifacts`;
+          const comment = `### Terraform Plan Results\n\nTerraform plans have been generated and uploaded as artifacts.\n\n[View Plan Artifacts](${artifactUrl})`;
+          
+          github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            body: comment
+          });

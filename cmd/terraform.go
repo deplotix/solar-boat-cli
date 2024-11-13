@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/deplotix/solar-boat-cli/internal/terraform"
 	"github.com/spf13/cobra"
@@ -12,6 +13,8 @@ var terraformCmd = &cobra.Command{
 	Short: "Manage Terraform operations",
 	Long:  `Execute Terraform operations on changed modules and their dependencies`,
 }
+
+var planOutputDir string
 
 var planCmd = &cobra.Command{
 	Use:   "plan",
@@ -28,8 +31,15 @@ var planCmd = &cobra.Command{
 			return nil
 		}
 
+		if planOutputDir != "" {
+			// Create output directory if it doesn't exist
+			if err := os.MkdirAll(planOutputDir, 0755); err != nil {
+				return fmt.Errorf("failed to create output directory: %w", err)
+			}
+		}
+
 		fmt.Printf("Running terraform plan on %d modules\n", len(modules))
-		return terraform.RunTerraformCommand(modules, "plan")
+		return terraform.RunTerraformCommand(modules, "plan", planOutputDir)
 	},
 }
 
@@ -54,6 +64,7 @@ var applyCmd = &cobra.Command{
 }
 
 func init() {
+	planCmd.Flags().StringVar(&planOutputDir, "output-dir", "", "Directory to save plan outputs")
 	terraformCmd.AddCommand(planCmd)
 	terraformCmd.AddCommand(applyCmd)
 	rootCmd.AddCommand(terraformCmd)

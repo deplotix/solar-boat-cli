@@ -61,7 +61,7 @@ func GetChangedModules(rootDir string) ([]string, error) {
 }
 
 // RunTerraformCommand executes terraform commands for the given modules
-func RunTerraformCommand(modules []string, command string) error {
+func RunTerraformCommand(modules []string, command string, outputDir string) error {
 	// Initialize all modules first
 	if command == "plan" || command == "apply" {
 		fmt.Println("🔧 Initializing all terraform modules...")
@@ -81,8 +81,16 @@ func RunTerraformCommand(modules []string, command string) error {
 
 	// Run the actual command on all modules
 	for _, modulePath := range modules {
+		args := []string{command}
+
+		// Add plan output file if specified
+		if command == "plan" && outputDir != "" {
+			planFile := filepath.Join(outputDir, fmt.Sprintf("%s.tfplan", filepath.Base(modulePath)))
+			args = append(args, "-out="+planFile)
+		}
+
 		fmt.Printf("🔨 Running terraform %s in %s\n", command, modulePath)
-		cmd := exec.Command("terraform", command)
+		cmd := exec.Command("terraform", args...)
 		cmd.Dir = modulePath
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr

@@ -4,6 +4,6 @@ WORKDIR /app
 COPY . .
 RUN go build -o /solar-boat-cli
 
-FROM alpine:3.18
+FROM hashicorp/terraform:latest
 COPY --from=builder /solar-boat-cli /solar-boat-cli
 ENTRYPOINT ["/solar-boat-cli"] 

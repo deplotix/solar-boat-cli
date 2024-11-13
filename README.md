@@ -23,6 +23,9 @@ Inspired by the Ancient Egyptian Solar Boats that carried Pharaohs through their
 # Plan Terraform changes
 solarboat terraform plan
 
+# Plan Terraform changes and save outputs to a directory
+solarboat terraform plan --output-dir ./terraform-plans
+
 # Apply Terraform changes
 solarboat terraform apply
 
@@ -51,14 +54,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+
+      # The action will automatically:
+      # 1. Run terraform plan and save outputs
+      # 2. Upload plan artifacts
+      # 3. Comment on the PR with links to the plan
       
       - name: Setup Solar Boat CLI
         uses: deplotix/solar-boat-action@v1
         with:
-          version: 'latest'  # or specify a version like 'v1.0.0'
+          version: 'latest'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           
-      - name: Plan Infrastructure Changes
-        run: solarboat terraform plan
         
       - name: Apply Infrastructure Changes
         if: github.ref == 'refs/heads/main'
@@ -67,8 +74,11 @@ jobs:
 
 This example shows how to:
 1. Set up Solar Boat CLI in a GitHub Actions workflow
-2. Run terraform plan on pull requests
-3. Apply changes automatically when merging to main branch
+2. Run terraform plan on pull requests and save the plans as artifacts
+3. Automatically comment on PRs with links to the plan artifacts
+4. Apply changes automatically when merging to main branch
+
+The workflow will trigger only when Terraform files are modified, and the plan artifacts will be available in the GitHub Actions UI for review.
 
 You can customize the workflow based on your specific needs and security requirements.
 
