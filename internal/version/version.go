@@ -7,7 +7,7 @@ import (
 
 var (
 	// Version is the current version of the CLI
-	Version = "0.1.2"
+	Version = "0.1.4"
 
 	// BuildTime is the time the binary was built
 	BuildTime = "unknown"

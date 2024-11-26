@@ -8,7 +8,7 @@ import (
 
 var (
 	// Version is the version number
-	Version = "0.1.2"
+	Version = "0.1.4"
 )
 
 // versionCmd represents the version command
