@@ -17,13 +17,12 @@ type Module struct {
 	IsStateless bool
 }
 
-// GetChangedModules finds all Terraform modules in the given root directory
-// and determines which ones are stateful vs stateless
+// GetChangedModules finds all Terraform modules and their dependencies
 func GetChangedModules(rootDir string) ([]string, error) {
-	moduleMap := make(map[string]struct{})
+	modules := make(map[string]*Module)
 	processedDirs := make(map[string]bool)
 
-	// First check all .tf files in the current directory and subdirectories
+	// First pass: identify all modules and their direct dependencies
 	err := filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return fmt.Errorf("failed to access path %s: %w", path, err)
@@ -36,28 +35,134 @@ func GetChangedModules(rootDir string) ([]string, error) {
 			}
 			processedDirs[dir] = true
 
-			fmt.Printf("🔍 Checking module: %s\n", dir)
-			if !isStatelessModule(dir) {
-				moduleMap[dir] = struct{}{}
-				fmt.Printf("✅ Found stateful module: %s\n", dir)
-			} else {
-				fmt.Printf("📦 Skipping shared module: %s\n", dir)
+			// Create or get module
+			if _, exists := modules[dir]; !exists {
+				modules[dir] = &Module{
+					Path:        dir,
+					IsStateless: isStatelessModule(dir),
+				}
+			}
+
+			// Parse file to find module dependencies
+			content, err := os.ReadFile(path)
+			if err == nil {
+				dependencies := findModuleDependencies(string(content), rootDir)
+				modules[dir].DependsOn = append(modules[dir].DependsOn, dependencies...)
 			}
 		}
 		return nil
 	})
 
+	// Second pass: build reverse dependencies (UsedBy)
+	for _, module := range modules {
+		for _, dep := range module.DependsOn {
+			if depModule, exists := modules[dep]; exists {
+				depModule.UsedBy = append(depModule.UsedBy, module.Path)
+			}
+		}
+	}
+
+	// Get git changes
+	changedFiles, err := getGitChangedFiles(rootDir)
 	if err != nil {
-		return nil, fmt.Errorf("failed to walk directory: %w", err)
+		return nil, err
 	}
 
-	modules := make([]string, 0, len(moduleMap))
-	for module := range moduleMap {
-		modules = append(modules, module)
+	// Mark changed modules and their dependents
+	changedModules := make([]string, 0)
+	for _, changedFile := range changedFiles {
+		dir := filepath.Dir(changedFile)
+		if module, exists := modules[dir]; exists {
+			markModuleChanged(module, modules, &changedModules)
+		}
 	}
 
-	printModuleSummary(modules)
-	return modules, nil
+	printModuleSummary(changedModules)
+	return changedModules, nil
+}
+
+// markModuleChanged marks a module and all modules that depend on it as changed
+func markModuleChanged(module *Module, allModules map[string]*Module, changedModules *[]string) {
+	if module.Changed {
+		return
+	}
+
+	module.Changed = true
+	if !module.IsStateless {
+		*changedModules = append(*changedModules, module.Path)
+	}
+
+	// Mark all modules that use this module as changed
+	for _, userPath := range module.UsedBy {
+		if userModule, exists := allModules[userPath]; exists {
+			markModuleChanged(userModule, allModules, changedModules)
+		}
+	}
+}
+
+// findModuleDependencies parses terraform files to find module dependencies
+func findModuleDependencies(content, rootDir string) []string {
+	var dependencies []string
+	// Simple regex or string matching to find module sources
+	// This is a basic implementation - you might want to use HCL parser for more accuracy
+	lines := strings.Split(content, "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "source") && strings.Contains(line, "module") {
+			// Extract module source path and resolve it to absolute path
+			// This is a simplified example - you'll need more robust parsing
+			sourcePath := extractModuleSource(line)
+			if absPath, err := filepath.Abs(filepath.Join(rootDir, sourcePath)); err == nil {
+				dependencies = append(dependencies, absPath)
+			}
+		}
+	}
+	return dependencies
+}
+
+// extractModuleSource extracts the source path from a module block
+func extractModuleSource(line string) string {
+	// This is a simplified implementation
+	// You might want to use proper HCL parsing for more accuracy
+	parts := strings.Split(line, "source")
+	if len(parts) < 2 {
+		return ""
+	}
+	source := strings.Trim(parts[1], " \t\"=")
+	return source
+}
+
+// getGitChangedFiles returns a list of changed files from git
+func getGitChangedFiles(rootDir string) ([]string, error) {
+	// Get the merge base between HEAD and main branch
+	mergeBaseCmd := exec.Command("git", "merge-base", "HEAD", "main")
+	mergeBaseCmd.Dir = rootDir
+	mergeBase, err := mergeBaseCmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to find merge base: %w", err)
+	}
+
+	// Get changed files between merge base and HEAD
+	diffCmd := exec.Command("git", "diff", "--name-only", strings.TrimSpace(string(mergeBase)), "HEAD")
+	diffCmd.Dir = rootDir
+	output, err := diffCmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get changed files: %w", err)
+	}
+
+	// Convert output to slice of absolute file paths
+	var changedFiles []string
+	for _, file := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if file == "" {
+			continue
+		}
+		absPath, err := filepath.Abs(filepath.Join(rootDir, file))
+		if err != nil {
+			return nil, fmt.Errorf("failed to get absolute path for %s: %w", file, err)
+		}
+		changedFiles = append(changedFiles, absPath)
+	}
+
+	return changedFiles, nil
 }
 
 // RunTerraformCommand executes terraform commands for the given modules
