@@ -18,12 +18,26 @@ and GitOps workflows. It provides a wide range of Developer Experience (DX) capa
 Use "solarboat [command] --help" for more information about a command.`,
 }
 
+var (
+	version string
+	commit  string
+	date    string
+)
+
+func SetVersion(v, c, d string) {
+	version = v
+	commit = c
+	date = d
+}
+
 func Execute() error {
 	return rootCmd.Execute()
 }
 
 func init() {
-	// Add version template
+	// Add version template with build information
 	rootCmd.SetVersionTemplate(`Solar Boat v{{.Version}}
+Commit: ` + commit + `
+Build Date: ` + date + `
 `)
 }

@@ -1,6 +1,6 @@
 module github.com/deplotix/solar-boat-cli
 
-go 1.23
+go 1.21
 
 require github.com/spf13/cobra v1.8.1
 
