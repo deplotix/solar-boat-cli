@@ -1,36 +1,84 @@
 name: 'Solar Boat CLI Action'
-description: 'GitHub Action for Solar Boat CLI tool'
+description: 'GitHub Action for Infrastructure as Code management with Solar Boat CLI'
+branding:
+  icon: 'anchor'
+  color: 'blue'
+
 inputs:
-  args:
-    description: 'Arguments to pass to the CLI tool'
+  command:
+    description: 'Command to run (plan or apply)'
     required: false
-    default: ''
+    default: 'plan'
+  output_dir:
+    description: 'Directory for terraform plan outputs'
+    required: false
+    default: 'terraform-plans'
   github_token:
     description: 'GitHub token for PR comments'
     required: true
+  auto_approve:
+    description: 'Automatically approve terraform apply'
+    required: false
+    default: 'false'
+
 runs:
   using: 'composite'
   steps:
     - name: Run Solar Boat CLI
       run: |
-        mkdir -p terraform-plans
-        /solar-boat-cli terraform plan --output-dir terraform-plans
+        echo "🚀 Running Solar Boat CLI v$(solarboat --version)"
+        
+        if [[ "${{ inputs.command }}" == "plan" ]]; then
+          echo "📋 Running Terraform plan..."
+          mkdir -p ${{ inputs.output_dir }}
+          solarboat terraform plan --output-dir ${{ inputs.output_dir }}
+        elif [[ "${{ inputs.command }}" == "apply" ]]; then
+          echo "⚠️ Running Terraform apply..."
+          if [[ "${{ inputs.auto_approve }}" == "true" ]]; then
+            solarboat terraform apply -auto-approve
+          else
+            solarboat terraform apply
+          fi
+        else
+          echo "❌ Invalid command: ${{ inputs.command }}"
+          exit 1
+        fi
       shell: bash
 
     - name: Upload Terraform Plans
+      if: inputs.command == 'plan'
       uses: actions/upload-artifact@v3
       with:
         name: terraform-plans
-        path: terraform-plans/
+        path: ${{ inputs.output_dir }}/
+        retention-days: 5
 
     - name: Comment on PR
-      if: github.event_name == 'pull_request'
+      if: github.event_name == 'pull_request' && inputs.command == 'plan'
       uses: actions/github-script@v6
       with:
         github-token: ${{ inputs.github_token }}
         script: |
           const artifactUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/artifacts`;
-          const comment = `### Terraform Plan Results\n\nTerraform plans have been generated and uploaded as artifacts.\n\n[View Plan Artifacts](${artifactUrl})`;
+          
+          const comment = `## 🚀 Terraform Plan Results
+
+          Solar Boat CLI has analyzed your changes and generated Terraform plans.
+          
+          ### 📋 Summary
+          - ✨ Plans have been generated and uploaded as artifacts
+          - 🔍 Review the plans before applying changes
+          - ⏱️ Plans will be retained for 5 days
+          
+          ### 🔗 Links
+          - [View Plan Artifacts](${artifactUrl})
+          
+          ### ℹ️ Next Steps
+          1. Download and review the plan artifacts
+          2. Merge this PR to trigger the apply workflow
+          3. Monitor the apply workflow for results
+          
+          > Note: Failed modules (if any) will be reported in the plan output above.`;
           
           github.rest.issues.createComment({
             owner: context.repo.owner,
