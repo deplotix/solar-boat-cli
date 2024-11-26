@@ -8,7 +8,6 @@ import (
 	"strings"
 )
 
-// Module represents a Terraform module with its properties
 type Module struct {
 	Path        string
 	DependsOn   []string
@@ -17,239 +16,260 @@ type Module struct {
 	IsStateless bool
 }
 
-// GetChangedModules finds all Terraform modules and their dependencies
+type ModuleError struct {
+	Path    string
+	Command string
+	Error   error
+}
+
+// GetChangedModules returns a list of stateful module paths that need to be processed
 func GetChangedModules(rootDir string) ([]string, error) {
+	// Initialize module registry
 	modules := make(map[string]*Module)
-	processedDirs := make(map[string]bool)
 
-	// First pass: identify all modules and their direct dependencies
-	err := filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return fmt.Errorf("failed to access path %s: %w", path, err)
-		}
-
-		if !info.IsDir() && strings.HasSuffix(path, ".tf") {
-			dir := filepath.Dir(path)
-			if _, processed := processedDirs[dir]; processed {
-				return nil
-			}
-			processedDirs[dir] = true
-
-			// Create or get module
-			if _, exists := modules[dir]; !exists {
-				modules[dir] = &Module{
-					Path:        dir,
-					IsStateless: isStatelessModule(dir),
-				}
-			}
-
-			// Parse file to find module dependencies
-			content, err := os.ReadFile(path)
-			if err == nil {
-				dependencies := findModuleDependencies(string(content), rootDir)
-				modules[dir].DependsOn = append(modules[dir].DependsOn, dependencies...)
-			}
-		}
-		return nil
-	})
-
-	// Second pass: build reverse dependencies (UsedBy)
-	for _, module := range modules {
-		for _, dep := range module.DependsOn {
-			if depModule, exists := modules[dep]; exists {
-				depModule.UsedBy = append(depModule.UsedBy, module.Path)
-			}
-		}
+	// First pass: discover all modules and their stateless status
+	if err := discoverModules(rootDir, modules); err != nil {
+		return nil, fmt.Errorf("failed to discover modules: %w", err)
 	}
 
-	// Get git changes
+	// Second pass: build dependency graph
+	if err := buildDependencyGraph(modules); err != nil {
+		return nil, fmt.Errorf("failed to build dependency graph: %w", err)
+	}
+
+	// Get changed files from git
 	changedFiles, err := getGitChangedFiles(rootDir)
-	if err != nil {
-		return nil, err
-	}
-
-	// Mark changed modules and their dependents
-	changedModules := make([]string, 0)
-	for _, changedFile := range changedFiles {
-		dir := filepath.Dir(changedFile)
-		if module, exists := modules[dir]; exists {
-			markModuleChanged(module, modules, &changedModules)
-		}
-	}
-
-	printModuleSummary(changedModules)
-	return changedModules, nil
-}
-
-// markModuleChanged marks a module and all modules that depend on it as changed
-func markModuleChanged(module *Module, allModules map[string]*Module, changedModules *[]string) {
-	if module.Changed {
-		return
-	}
-
-	module.Changed = true
-	if !module.IsStateless {
-		*changedModules = append(*changedModules, module.Path)
-	}
-
-	// Mark all modules that use this module as changed
-	for _, userPath := range module.UsedBy {
-		if userModule, exists := allModules[userPath]; exists {
-			markModuleChanged(userModule, allModules, changedModules)
-		}
-	}
-}
-
-// findModuleDependencies parses terraform files to find module dependencies
-func findModuleDependencies(content, rootDir string) []string {
-	var dependencies []string
-	// Simple regex or string matching to find module sources
-	// This is a basic implementation - you might want to use HCL parser for more accuracy
-	lines := strings.Split(content, "\n")
-	for _, line := range lines {
-		if strings.Contains(line, "source") && strings.Contains(line, "module") {
-			// Extract module source path and resolve it to absolute path
-			// This is a simplified example - you'll need more robust parsing
-			sourcePath := extractModuleSource(line)
-			if absPath, err := filepath.Abs(filepath.Join(rootDir, sourcePath)); err == nil {
-				dependencies = append(dependencies, absPath)
-			}
-		}
-	}
-	return dependencies
-}
-
-// extractModuleSource extracts the source path from a module block
-func extractModuleSource(line string) string {
-	// This is a simplified implementation
-	// You might want to use proper HCL parsing for more accuracy
-	parts := strings.Split(line, "source")
-	if len(parts) < 2 {
-		return ""
-	}
-	source := strings.Trim(parts[1], " \t\"=")
-	return source
-}
-
-// getGitChangedFiles returns a list of changed files from git
-func getGitChangedFiles(rootDir string) ([]string, error) {
-	// Get the merge base between HEAD and main branch
-	mergeBaseCmd := exec.Command("git", "merge-base", "HEAD", "main")
-	mergeBaseCmd.Dir = rootDir
-	mergeBase, err := mergeBaseCmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("failed to find merge base: %w", err)
-	}
-
-	// Get changed files between merge base and HEAD
-	diffCmd := exec.Command("git", "diff", "--name-only", strings.TrimSpace(string(mergeBase)), "HEAD")
-	diffCmd.Dir = rootDir
-	output, err := diffCmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get changed files: %w", err)
 	}
 
-	// Convert output to slice of absolute file paths
-	var changedFiles []string
-	for _, file := range strings.Split(strings.TrimSpace(string(output)), "\n") {
-		if file == "" {
-			continue
-		}
-		absPath, err := filepath.Abs(filepath.Join(rootDir, file))
-		if err != nil {
-			return nil, fmt.Errorf("failed to get absolute path for %s: %w", file, err)
-		}
-		changedFiles = append(changedFiles, absPath)
-	}
-
-	return changedFiles, nil
+	// Process changes and return affected stateful modules
+	return processChangedModules(changedFiles, modules)
 }
 
-// RunTerraformCommand executes terraform commands for the given modules
-func RunTerraformCommand(modules []string, command string, outputDir string) error {
-	// Initialize all modules first
-	if command == "plan" || command == "apply" {
-		fmt.Println("🔧 Initializing all terraform modules...")
-		for _, modulePath := range modules {
-			fmt.Printf("  ⚡ Initializing %s\n", modulePath)
-			initCmd := exec.Command("terraform", "init")
-			initCmd.Dir = modulePath
-			initCmd.Stdout = os.Stdout
-			initCmd.Stderr = os.Stderr
-
-			if err := initCmd.Run(); err != nil {
-				return fmt.Errorf("failed to initialize terraform in %s: %w", modulePath, err)
-			}
-		}
-		fmt.Println("✅ All modules initialized successfully")
-	}
-
-	// Run the actual command on all modules
-	for _, modulePath := range modules {
-		args := []string{command}
-
-		if command == "plan" {
-			if outputDir == "" {
-				outputDir = "terraform-plans"
-			}
-			if err := os.MkdirAll(outputDir, 0755); err != nil {
-				return fmt.Errorf("failed to create output directory: %w", err)
-			}
-			planFile := filepath.Join(outputDir, fmt.Sprintf("%s.tfplan", filepath.Base(modulePath)))
-			args = append(args, "-out="+planFile)
+func discoverModules(rootDir string, modules map[string]*Module) error {
+	return filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || !info.IsDir() {
+			return err
 		}
 
-		fmt.Printf("🔨 Running terraform %s in %s\n", command, modulePath)
-		cmd := exec.Command("terraform", args...)
-		cmd.Dir = modulePath
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+		// Check if directory contains .tf files
+		tfFiles, err := filepath.Glob(filepath.Join(path, "*.tf"))
+		if err != nil || len(tfFiles) == 0 {
+			return nil
+		}
 
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("failed to run terraform %s in %s: %w", command, modulePath, err)
+		absPath, err := filepath.Abs(path)
+		if err != nil {
+			return fmt.Errorf("failed to get absolute path for %s: %w", path, err)
+		}
+
+		// Create module if it doesn't exist
+		if _, exists := modules[absPath]; !exists {
+			modules[absPath] = &Module{
+				Path:        absPath,
+				IsStateless: !hasBackendConfig(tfFiles),
+			}
+		}
+
+		return nil
+	})
+}
+
+func buildDependencyGraph(modules map[string]*Module) error {
+	for path, module := range modules {
+		// Find all .tf files in the module
+		tfFiles, err := filepath.Glob(filepath.Join(path, "*.tf"))
+		if err != nil {
+			return fmt.Errorf("failed to glob .tf files in %s: %w", path, err)
+		}
+
+		// Parse each file for module dependencies
+		for _, file := range tfFiles {
+			content, err := os.ReadFile(file)
+			if err != nil {
+				continue
+			}
+
+			deps := findModuleDependencies(string(content), path)
+			for _, dep := range deps {
+				if depModule, exists := modules[dep]; exists {
+					module.DependsOn = append(module.DependsOn, dep)
+					depModule.UsedBy = append(depModule.UsedBy, path)
+				}
+			}
 		}
 	}
 	return nil
 }
 
-// isStatelessModule determines if a module is stateless by checking for backend configuration
-func isStatelessModule(path string) bool {
-	files, err := filepath.Glob(filepath.Join(path, "*.tf"))
-	if err != nil {
-		// If there's an error reading the directory, assume it's not stateless
-		return false
-	}
+func findModuleDependencies(content, currentDir string) []string {
+	var deps []string
+	lines := strings.Split(content, "\n")
+	inModuleBlock := false
 
-	for _, file := range files {
+	for _, line := range lines {
+		trimmedLine := strings.TrimSpace(line)
+
+		if strings.HasPrefix(trimmedLine, "module") && strings.Contains(trimmedLine, "{") {
+			inModuleBlock = true
+			continue
+		}
+
+		if inModuleBlock {
+			if strings.Contains(trimmedLine, "source") {
+				parts := strings.Split(trimmedLine, "=")
+				if len(parts) == 2 {
+					source := strings.Trim(parts[1], " \t\"'")
+					modulePath := filepath.Clean(filepath.Join(currentDir, source))
+					if absPath, err := filepath.Abs(modulePath); err == nil {
+						deps = append(deps, absPath)
+					}
+				}
+			}
+			if strings.Contains(trimmedLine, "}") {
+				inModuleBlock = false
+			}
+		}
+	}
+	return deps
+}
+
+func hasBackendConfig(tfFiles []string) bool {
+	for _, file := range tfFiles {
 		content, err := os.ReadFile(file)
 		if err != nil {
 			continue
 		}
 
-		// If we find a backend configuration, the module is not stateless
-		if hasBackendConfig(string(content)) {
-			return false
+		if strings.Contains(string(content), "backend") {
+			return true
+		}
+	}
+	return false
+}
+
+func getGitChangedFiles(rootDir string) ([]string, error) {
+	cmd := exec.Command("git", "status", "--porcelain")
+	cmd.Dir = rootDir
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get git status: %w", err)
+	}
+
+	var changedFiles []string
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if line == "" {
+			continue
+		}
+
+		file := strings.TrimSpace(line[2:])
+		if strings.HasSuffix(file, ".tf") {
+			absPath, err := filepath.Abs(filepath.Join(rootDir, file))
+			if err == nil {
+				changedFiles = append(changedFiles, absPath)
+			}
 		}
 	}
 
-	return true
+	return changedFiles, nil
 }
 
-// hasBackendConfig checks if the given content contains a backend configuration
-func hasBackendConfig(content string) bool {
-	return strings.Contains(content, "terraform {") &&
-		strings.Contains(content, "backend ")
+func processChangedModules(changedFiles []string, modules map[string]*Module) ([]string, error) {
+	var affectedModules []string
+	processed := make(map[string]bool)
+
+	for _, file := range changedFiles {
+		moduleDir := filepath.Dir(file)
+		if module, exists := modules[moduleDir]; exists {
+			markModuleChanged(module, modules, &affectedModules, processed)
+		}
+	}
+
+	return affectedModules, nil
 }
 
-// printModuleSummary prints a summary of found modules
-func printModuleSummary(modules []string) {
-	if len(modules) == 0 {
-		fmt.Println("⚠️  No stateful modules were found")
+func markModuleChanged(module *Module, allModules map[string]*Module, affectedModules *[]string, processed map[string]bool) {
+	if processed[module.Path] {
 		return
 	}
+	processed[module.Path] = true
 
-	fmt.Printf("📝 Found %d stateful modules:\n", len(modules))
-	for _, module := range modules {
-		fmt.Printf("   - %s\n", module)
+	module.Changed = true
+
+	if module.IsStateless {
+		// For stateless modules, propagate changes to dependent modules
+		for _, userPath := range module.UsedBy {
+			if userModule, exists := allModules[userPath]; exists {
+				markModuleChanged(userModule, allModules, affectedModules, processed)
+			}
+		}
+	} else {
+		// For stateful modules, add to affected list
+		*affectedModules = append(*affectedModules, module.Path)
 	}
+}
+
+// RunTerraformCommand executes terraform commands on the specified modules
+func RunTerraformCommand(modules []string, command string, planDir string) error {
+	var failedModules []ModuleError
+
+	for _, module := range modules {
+		fmt.Printf("\n📦 Processing module: %s\n", module)
+
+		// Run terraform init first
+		fmt.Printf("  🔧 Initializing module...\n")
+		initCmd := exec.Command("terraform", "init")
+		initCmd.Dir = module
+		initCmd.Stdout = os.Stdout
+		initCmd.Stderr = os.Stderr
+
+		if err := initCmd.Run(); err != nil {
+			fmt.Printf("  ❌ Initialization failed, skipping module\n")
+			failedModules = append(failedModules, ModuleError{
+				Path:    module,
+				Command: "init",
+				Error:   err,
+			})
+			continue
+		}
+
+		// Run the actual command (plan or apply)
+		fmt.Printf("  🚀 Running terraform %s...\n", command)
+		args := []string{command}
+		if command == "plan" && planDir != "" {
+			planFile := filepath.Join(planDir, filepath.Base(module)+".tfplan")
+			args = append(args, "-out="+planFile)
+		}
+
+		cmd := exec.Command("terraform", args...)
+		cmd.Dir = module
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		if err := cmd.Run(); err != nil {
+			failedModules = append(failedModules, ModuleError{
+				Path:    module,
+				Command: command,
+				Error:   err,
+			})
+			continue
+		}
+
+		fmt.Printf("  ✅ Module processed successfully\n")
+	}
+
+	// Report any failures at the end
+	if len(failedModules) > 0 {
+		fmt.Printf("\n⚠️  Some modules failed to process:\n")
+		for _, failure := range failedModules {
+			fmt.Printf("  ❌ %s: %s failed - %v\n",
+				failure.Path,
+				failure.Command,
+				failure.Error)
+		}
+		return fmt.Errorf("failed to process %d module(s)", len(failedModules))
+	}
+
+	return nil
 }
