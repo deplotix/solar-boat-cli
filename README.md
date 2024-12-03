@@ -1,5 +1,7 @@
 # Solar Boat CLI 🚀
 
+[![Release](https://github.com/deplotix/solar-boat-cli/actions/workflows/release.yml/badge.svg)](https://github.com/deplotix/solar-boat-cli/actions/workflows/release.yml)
+
 Solar Boat is a command-line interface tool designed for Infrastructure as Code (IaC) and GitOps workflows. It provides intelligent Terraform operations management with automatic dependency detection and stateful/stateless module handling.
 
 ## Why "Solar Boat"? ⛵
