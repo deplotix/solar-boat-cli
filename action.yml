@@ -24,7 +24,22 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    - name: Install Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Install Solar Boat CLI
+      shell: bash
+      run: |
+        # Install Solar Boat CLI using go install
+        go install github.com/deplotix/solar-boat-cli@latest
+        
+        # Ensure binary is in PATH
+        export PATH=$PATH:$(go env GOPATH)/bin
+
     - name: Run Solar Boat CLI
+      shell: bash
       run: |
         echo "🚀 Running Solar Boat CLI v$(solarboat --version)"
         
@@ -43,7 +58,6 @@ runs:
           echo "❌ Invalid command: ${{ inputs.command }}"
           exit 1
         fi
-      shell: bash
 
     - name: Upload Terraform Plans
       if: inputs.command == 'plan'
