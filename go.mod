@@ -1,4 +1,4 @@
-module github.com/deplotix/solar-boat-cli
+module solarboat
 
 go 1.21
 

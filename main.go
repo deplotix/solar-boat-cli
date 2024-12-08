@@ -3,9 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
-
-	"github.com/deplotix/solar-boat-cli/cmd"
-	"github.com/deplotix/solar-boat-cli/internal/version"
+	"solarboat/cmd"
+	"solarboat/internal/version"
 )
 
 func main() {
