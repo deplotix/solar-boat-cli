@@ -3,9 +3,9 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"solarboat/internal/terraform"
 	"strings"
 
+	"github.com/deplotix/solar-boat-cli/internal/terraform"
 	"github.com/spf13/cobra"
 )
 
