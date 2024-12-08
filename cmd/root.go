@@ -5,9 +5,8 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:     "solarboat",
-	Version: "0.1.4",
-	Short:   "Solar Boat - A CLI tool for GitOps and Developer Experience",
+	Use:   "solarboat",
+	Short: "Solar Boat - A CLI tool for GitOps and Developer Experience",
 	Long: `Solar Boat is a command-line interface tool designed for Infrastructure as Code (IaC) 
 and GitOps workflows. It provides a wide range of Developer Experience (DX) capabilities including:
 
@@ -18,26 +17,13 @@ and GitOps workflows. It provides a wide range of Developer Experience (DX) capa
 Use "solarboat [command] --help" for more information about a command.`,
 }
 
-var (
-	version string
-	commit  string
-	date    string
-)
+var version string
 
-func SetVersion(v, c, d string) {
+func SetVersion(v string) {
 	version = v
-	commit = c
-	date = d
+	rootCmd.Version = v
 }
 
 func Execute() error {
 	return rootCmd.Execute()
-}
-
-func init() {
-	// Add version template with build information
-	rootCmd.SetVersionTemplate(`Solar Boat v{{.Version}}
-Commit: ` + commit + `
-Build Date: ` + date + `
-`)
 }

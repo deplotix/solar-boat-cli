@@ -14,9 +14,9 @@ builds:
       - arm64
     ldflags:
       - -s -w
-      - -X github.com/deplotix/solar-boat-cli/cmd.version={{.Version}}
-      - -X github.com/deplotix/solar-boat-cli/cmd.commit={{.Commit}}
-      - -X github.com/deplotix/solar-boat-cli/cmd.date={{.Date}}
+      - -X github.com/deplotix/solar-boat-cli/internal/version.Version={{.Version}}
+      - -X github.com/deplotix/solar-boat-cli/internal/version.CommitHash={{.Commit}}
+      - -X github.com/deplotix/solar-boat-cli/internal/version.BuildTime={{.Date}}
 
 archives:
   - format: tar.gz

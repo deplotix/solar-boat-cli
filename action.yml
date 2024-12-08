@@ -35,8 +35,11 @@ runs:
         # Install Solar Boat CLI using go install
         go install github.com/deplotix/solar-boat-cli@latest
         
-        # Ensure binary is in PATH
-        export PATH=$PATH:$(go env GOPATH)/bin
+        # Add Go bin to PATH and make it persistent for subsequent steps
+        echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+        
+        # Verify installation
+        solarboat version || (echo "Installation failed" && exit 1)
 
     - name: Run Solar Boat CLI
       shell: bash

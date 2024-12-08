@@ -5,17 +5,11 @@ import (
 	"os"
 
 	"github.com/deplotix/solar-boat-cli/cmd"
-)
-
-// These variables will be set during build time
-var (
-	version = "dev"
-	commit  = "none"
-	date    = "unknown"
+	"github.com/deplotix/solar-boat-cli/internal/version"
 )
 
 func main() {
-	cmd.SetVersion(version, commit, date)
+	cmd.SetVersion(version.GetVersion())
 	if err := cmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
