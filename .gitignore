@@ -3,11 +3,8 @@
 #
 # Binaries for programs and plugins
 # Binary files
-*
-!*.*
-!*/
-*.exe
-*.exe~
+solarboat
+solarboat.exe
 *.dll
 *.so
 *.dylib
